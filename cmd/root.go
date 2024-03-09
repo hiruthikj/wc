@@ -22,7 +22,9 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -41,11 +43,41 @@ func check(e error) {
 }
 
 // TODO: float?
-func getFileSizeBytes(path string) (count int64, err error) {
+func getFileSizeBytes(path string) (int64, error) {
 	fi, err := os.Stat(filePath)
 	check(err)
 
 	return fi.Size(), nil
+}
+
+// From https://pkg.go.dev/internal/bytealg#Count
+func countByteOccurence(b []byte, c byte) (n int64) {
+	for _, x := range b {
+		if x == c {
+			n++
+		}
+	}
+	return n
+}
+
+// Based on https://stackoverflow.com/a/24563853/9283726
+func lineCounter(r io.Reader) (count int64, err error) {
+	buf := make([]byte, bufio.MaxScanTokenSize)
+
+	lineBreak := '\n'
+
+	for {
+		c, err := r.Read(buf)
+		count += countByteOccurence(buf[:c], byte(lineBreak))
+
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return count, err
+		}
+	}
 
 }
 
@@ -65,6 +97,14 @@ With no FILE, or when FILE is -, read standard input.`,
 			fmt.Printf("%v %s\n", count, filePath)
 		}
 
+		isSet = cmd.Flags().Lookup("lines").Changed
+		if isSet {
+			f, err := os.Open(filePath)
+			check(err)
+			count, err := lineCounter(f)
+			check(err)
+			fmt.Printf("%v %s\n", count, filePath)
+		}
 	},
 }
 
@@ -81,6 +121,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ccwc.yaml)")
 
 	rootCmd.Flags().StringVarP(&filePath, "bytes", "c", filePath, "print the byte counts")
+	rootCmd.Flags().StringVarP(&filePath, "lines", "l", filePath, "print the newline counts")
+	rootCmd.Flags().StringVarP(&filePath, "words", "w", filePath, "print the word counts")
+	rootCmd.Flags().StringVarP(&filePath, "chars", "m", filePath, "print the character counts")
 }
 
 // initConfig reads in config file and ENV variables if set.
