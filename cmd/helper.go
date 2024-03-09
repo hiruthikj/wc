@@ -67,3 +67,17 @@ func wordCounter(r *bufio.Reader) (count int64, err error) {
 
 	}
 }
+
+func runeCounter(r *bufio.Reader) (count int64, err error) {
+	for {
+		_, _, err := r.ReadRune()
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return count, err
+		}
+		count++
+	}
+}

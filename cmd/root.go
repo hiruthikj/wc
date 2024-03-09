@@ -87,6 +87,18 @@ func wcRunnerFn(cmd *cobra.Command, args []string) {
 		outputSb.WriteString(" ")
 	}
 
+	isSet = cmd.Flags().Lookup("chars").Changed
+	if isSet {
+		f, err := os.Open(filePath)
+		check(err)
+		r := bufio.NewReader(f)
+		count, err := runeCounter(r)
+		check(err)
+		outputSb.WriteString(fmt.Sprint(count))
+
+		outputSb.WriteString(" ")
+	}
+
 	outputSb.WriteString(filePath)
 	fmt.Println(outputSb.String())
 }
