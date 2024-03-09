@@ -24,8 +24,8 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -42,45 +42,6 @@ func check(e error) {
 	}
 }
 
-// TODO: float?
-func getFileSizeBytes(path string) (int64, error) {
-	fi, err := os.Stat(filePath)
-	check(err)
-
-	return fi.Size(), nil
-}
-
-// From https://pkg.go.dev/internal/bytealg#Count
-func countByteOccurence(b []byte, c byte) (n int64) {
-	for _, x := range b {
-		if x == c {
-			n++
-		}
-	}
-	return n
-}
-
-// Based on https://stackoverflow.com/a/24563853/9283726
-func lineCounter(r io.Reader) (count int64, err error) {
-	buf := make([]byte, bufio.MaxScanTokenSize)
-
-	lineBreak := '\n'
-
-	for {
-		c, err := r.Read(buf)
-		count += countByteOccurence(buf[:c], byte(lineBreak))
-
-		switch {
-		case err == io.EOF:
-			return count, nil
-
-		case err != nil:
-			return count, err
-		}
-	}
-
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "ccwc",
 	Short: "wc - print newline, word, and byte counts for each file",
@@ -88,24 +49,46 @@ var rootCmd = &cobra.Command{
 A word is a non-zero-length sequence of characters delimited by white space.
 
 With no FILE, or when FILE is -, read standard input.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		isSet := cmd.Flags().Lookup("bytes").Changed
+	Run: wcRunnerFn,
+}
 
-		if isSet {
-			count, err := getFileSizeBytes(filePath)
-			check(err)
-			fmt.Printf("%v %s\n", count, filePath)
-		}
+func wcRunnerFn(cmd *cobra.Command, args []string) {
+	isSet := cmd.Flags().Lookup("bytes").Changed
 
-		isSet = cmd.Flags().Lookup("lines").Changed
-		if isSet {
-			f, err := os.Open(filePath)
-			check(err)
-			count, err := lineCounter(f)
-			check(err)
-			fmt.Printf("%v %s\n", count, filePath)
-		}
-	},
+	var outputSb strings.Builder
+
+	if isSet {
+		count, err := getFileSizeBytes(filePath)
+		check(err)
+		outputSb.WriteString(fmt.Sprint(count))
+		outputSb.WriteString(" ")
+	}
+
+	isSet = cmd.Flags().Lookup("lines").Changed
+	if isSet {
+		f, err := os.Open(filePath)
+		check(err)
+		count, err := lineCounter(f)
+		check(err)
+		outputSb.WriteString(fmt.Sprint(count))
+
+		outputSb.WriteString(" ")
+	}
+
+	isSet = cmd.Flags().Lookup("words").Changed
+	if isSet {
+		f, err := os.Open(filePath)
+		check(err)
+		r := bufio.NewReader(f)
+		count, err := wordCounter(r)
+		check(err)
+		outputSb.WriteString(fmt.Sprint(count))
+
+		outputSb.WriteString(" ")
+	}
+
+	outputSb.WriteString(filePath)
+	fmt.Println(outputSb.String())
 }
 
 func Execute() {
@@ -124,6 +107,8 @@ func init() {
 	rootCmd.Flags().StringVarP(&filePath, "lines", "l", filePath, "print the newline counts")
 	rootCmd.Flags().StringVarP(&filePath, "words", "w", filePath, "print the word counts")
 	rootCmd.Flags().StringVarP(&filePath, "chars", "m", filePath, "print the character counts")
+
+	// rootCmd.MarkFlagFilename("bytes")
 }
 
 // initConfig reads in config file and ENV variables if set.
