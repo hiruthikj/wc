@@ -24,16 +24,21 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile  string
-	filePath string
+	cfgFile    string
+	countBytes bool
+	countLines bool
+	countWords bool
+	countChars bool
 )
 
 func check(e error) {
@@ -53,51 +58,78 @@ With no FILE, or when FILE is -, read standard input.`,
 }
 
 func wcRunnerFn(cmd *cobra.Command, args []string) {
-	isSet := cmd.Flags().Lookup("bytes").Changed
+	fi, _ := os.Stdin.Stat() // get the FileInfo struct describing the standard input.
+	var reader io.Reader
+	var err error
+	var filePath string
+
+	if (fi.Mode() & os.ModeCharDevice) == 0 {
+		fmt.Println("Data is from pipe")
+
+		reader = os.Stdin
+		// bytes, _ := io.ReadAll(os.Stdin)
+		// str := string(bytes)
+		// fmt.Println(str)
+	} else {
+		if len(args) != 1 {
+			cmd.Help()
+			os.Exit(1)
+		}
+		filePath = args[0]
+		reader, err = os.Open(filePath)
+		check(err)
+	}
+
 
 	var outputSb strings.Builder
 
-	if isSet {
-		count, err := getFileSizeBytes(filePath)
-		check(err)
-		outputSb.WriteString(fmt.Sprint(count))
-		outputSb.WriteString(" ")
-	}
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		switch f.Name {
+		case "bytes":
+			var count int64
+			if countBytes {
+				if (fi.Mode() & os.ModeCharDevice) == 0 {
+					count, err = getCountBytes(reader)
+				} else {
+					count, err = getFileSizeBytes(filePath)
+				}
+				check(err)
 
-	isSet = cmd.Flags().Lookup("lines").Changed
-	if isSet {
-		f, err := os.Open(filePath)
-		check(err)
-		count, err := lineCounter(f)
-		check(err)
-		outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(" ")
+			}
 
-		outputSb.WriteString(" ")
-	}
+		case "lines":
+			if countLines {
+				count, err := lineCounter(reader)
+				check(err)
 
-	isSet = cmd.Flags().Lookup("words").Changed
-	if isSet {
-		f, err := os.Open(filePath)
-		check(err)
-		r := bufio.NewReader(f)
-		count, err := wordCounter(r)
-		check(err)
-		outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(" ")
+			}
 
-		outputSb.WriteString(" ")
-	}
+		case "words":
+			if countWords {
+				r := bufio.NewReader(reader)
+				count, err := wordCounter(r)
+				check(err)
 
-	isSet = cmd.Flags().Lookup("chars").Changed
-	if isSet {
-		f, err := os.Open(filePath)
-		check(err)
-		r := bufio.NewReader(f)
-		count, err := runeCounter(r)
-		check(err)
-		outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(" ")
+			}
 
-		outputSb.WriteString(" ")
-	}
+		case "chars":
+			if countChars {
+				r := bufio.NewReader(reader)
+				count, err := runeCounter(r)
+				check(err)
+
+				outputSb.WriteString(fmt.Sprint(count))
+				outputSb.WriteString(" ")
+			}
+
+		}
+	})
 
 	outputSb.WriteString(filePath)
 	fmt.Println(outputSb.String())
@@ -115,10 +147,12 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ccwc.yaml)")
 
-	rootCmd.Flags().StringVarP(&filePath, "bytes", "c", filePath, "print the byte counts")
-	rootCmd.Flags().StringVarP(&filePath, "lines", "l", filePath, "print the newline counts")
-	rootCmd.Flags().StringVarP(&filePath, "words", "w", filePath, "print the word counts")
-	rootCmd.Flags().StringVarP(&filePath, "chars", "m", filePath, "print the character counts")
+	rootCmd.Flags().BoolVarP(&countBytes, "bytes", "c", false, "print the byte counts")
+	rootCmd.Flags().BoolVarP(&countLines, "lines", "l", false, "print the newline counts")
+	rootCmd.Flags().BoolVarP(&countWords, "words", "w", false, "print the word counts")
+	rootCmd.Flags().BoolVarP(&countChars, "chars", "m", false, "print the character counts")
+
+	rootCmd.Flags().SortFlags = false
 
 	// rootCmd.MarkFlagFilename("bytes")
 }

@@ -9,10 +9,26 @@ import (
 
 // TODO: float?
 func getFileSizeBytes(path string) (int64, error) {
-	fi, err := os.Stat(filePath)
+	fi, err := os.Stat(path)
 	check(err)
 
 	return fi.Size(), nil
+}
+
+func getCountBytes(r io.Reader) (count int64, err error) {
+	buf := make([]byte, bufio.MaxScanTokenSize)
+
+	for {
+		_, err := r.Read(buf)
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return count, err
+		}
+		count++
+	}
 }
 
 // From https://pkg.go.dev/internal/bytealg#Count
